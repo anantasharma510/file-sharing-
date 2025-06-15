@@ -34,29 +34,30 @@ export async function connectToDatabase(): Promise<{ client: MongoClient; db: Db
     const client = await clientPromise
     const db = client.db("vercel_network_share")
 
-    // Create indexes for better performance (only in production)
-    if (process.env.NODE_ENV === "production") {
-      await Promise.all([
-        // TTL index for auto-deletion after 24 hours
-        db
-          .collection("shared_items")
-          .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    // Always ensure TTL indexes exist (both dev and production)
+    await Promise.all([
+      // TTL index for auto-deletion after 24 hours
+      db
+        .collection("shared_items")
+        .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
 
-        // Index for network-based queries
-        db
-          .collection("shared_items")
-          .createIndex({ networkId: 1, createdAt: -1 }),
+      // Index for network-based queries
+      db
+        .collection("shared_items")
+        .createIndex({ networkId: 1, createdAt: -1 }),
 
-        // Index for user sessions
-        db
-          .collection("user_sessions")
-          .createIndex(
-            { lastSeen: 1 },
-            { expireAfterSeconds: 300 }, // 5 minutes
-          ),
-        db.collection("user_sessions").createIndex({ networkId: 1 }),
-      ])
-    }
+      // Index for user sessions with TTL (5 minutes)
+      db
+        .collection("user_sessions")
+        .createIndex({ lastSeen: 1 }, { expireAfterSeconds: 300 }),
+
+      db.collection("user_sessions").createIndex({ networkId: 1 }),
+
+      // Additional cleanup index for very old items
+      db
+        .collection("shared_items")
+        .createIndex({ createdAt: 1 }),
+    ])
 
     return { client, db }
   } catch (error) {

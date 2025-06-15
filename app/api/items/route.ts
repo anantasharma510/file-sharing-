@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { rateLimit } from "@/lib/rate-limit"
 import { validateNetworkId, sanitizeInput } from "@/lib/validation"
+import { smartCleanup } from "@/lib/smart-cleanup"
 
 const MAX_TEXT_LENGTH = 5000 // Reduced for free plan
 const MAX_ITEMS_PER_NETWORK = 25
@@ -22,7 +23,10 @@ export async function GET(request: NextRequest) {
 
     const { db } = await connectToDatabase()
 
-    // Get items for this network, sorted by creation date (limit for free plan)
+    // Run smart cleanup in background (non-blocking)
+    smartCleanup(db).catch((error) => console.error("Background cleanup failed:", error))
+
+    // Get items for this network, sorted by creation date
     const items = await db
       .collection("shared_items")
       .find({

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { rateLimit } from "@/lib/rate-limit"
 import { validateNetworkId } from "@/lib/validation"
+import { smartCleanup } from "@/lib/smart-cleanup"
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,6 +19,9 @@ export async function GET(request: NextRequest) {
     }
 
     const { db } = await connectToDatabase()
+
+    // Run smart cleanup in background
+    smartCleanup(db).catch((error) => console.error("Background cleanup failed:", error))
 
     // Get network statistics
     const [itemStats, userStats] = await Promise.all([
