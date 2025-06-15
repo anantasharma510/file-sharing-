@@ -7,12 +7,12 @@ interface CleanupStats {
 }
 
 let lastCleanup = 0
-const CLEANUP_INTERVAL = 5 * 60 * 1000 // 5 minutes between cleanups
+const CLEANUP_INTERVAL = 10 * 60 * 1000 // 10 minutes between cleanups (less frequent)
 
 export async function smartCleanup(db: Db): Promise<CleanupStats | null> {
   const now = Date.now()
 
-  // Only run cleanup every 5 minutes to avoid excessive operations
+  // Only run cleanup every 10 minutes to reduce function calls
   if (now - lastCleanup < CLEANUP_INTERVAL) {
     return null
   }
@@ -22,29 +22,31 @@ export async function smartCleanup(db: Db): Promise<CleanupStats | null> {
   try {
     const currentTime = new Date()
 
-    // Clean up expired items (TTL should handle this, but backup cleanup)
-    const expiredItems = await db.collection("shared_items").deleteMany({
-      expiresAt: { $lt: currentTime },
-    })
+    // Minimal cleanup - let TTL handle most of it
+    const [expiredItems, oldSessions] = await Promise.all([
+      // Only clean obviously expired items (TTL backup)
+      db
+        .collection("shared_items")
+        .deleteMany({
+          expiresAt: { $lt: new Date(currentTime.getTime() - 60 * 60 * 1000) }, // 1 hour past expiry
+        }),
 
-    // Clean up old user sessions (TTL should handle this too)
-    const oldSessions = await db.collection("user_sessions").deleteMany({
-      lastSeen: { $lt: new Date(currentTime.getTime() - 10 * 60 * 1000) }, // 10 minutes old
-    })
-
-    // Clean up very old items as safety measure (48+ hours old)
-    const veryOldItems = await db.collection("shared_items").deleteMany({
-      createdAt: { $lt: new Date(currentTime.getTime() - 48 * 60 * 60 * 1000) },
-    })
+      // Clean very old sessions (TTL backup)
+      db
+        .collection("user_sessions")
+        .deleteMany({
+          lastSeen: { $lt: new Date(currentTime.getTime() - 15 * 60 * 1000) }, // 15 minutes old
+        }),
+    ])
 
     const stats = {
       expiredItems: expiredItems.deletedCount,
       oldSessions: oldSessions.deletedCount,
-      veryOldItems: veryOldItems.deletedCount,
+      veryOldItems: 0,
     }
 
-    // Only log if something was cleaned up
-    if (stats.expiredItems > 0 || stats.oldSessions > 0 || stats.veryOldItems > 0) {
+    // Only log if something significant was cleaned
+    if (stats.expiredItems > 5 || stats.oldSessions > 10) {
       console.log(`Smart cleanup completed:`, stats)
     }
 
@@ -59,15 +61,26 @@ export async function forceCleanup(db: Db): Promise<CleanupStats> {
   const currentTime = new Date()
 
   const [expiredItems, oldSessions, veryOldItems] = await Promise.all([
-    db.collection("shared_items").deleteMany({
-      expiresAt: { $lt: currentTime },
-    }),
-    db.collection("user_sessions").deleteMany({
-      lastSeen: { $lt: new Date(currentTime.getTime() - 5 * 60 * 1000) },
-    }),
-    db.collection("shared_items").deleteMany({
-      createdAt: { $lt: new Date(currentTime.getTime() - 48 * 60 * 60 * 1000) },
-    }),
+    // Clean expired items
+    db
+      .collection("shared_items")
+      .deleteMany({
+        expiresAt: { $lt: currentTime },
+      }),
+
+    // Clean old sessions
+    db
+      .collection("user_sessions")
+      .deleteMany({
+        lastSeen: { $lt: new Date(currentTime.getTime() - 5 * 60 * 1000) },
+      }),
+
+    // Clean very old items (48+ hours)
+    db
+      .collection("shared_items")
+      .deleteMany({
+        createdAt: { $lt: new Date(currentTime.getTime() - 48 * 60 * 60 * 1000) },
+      }),
   ])
 
   return {

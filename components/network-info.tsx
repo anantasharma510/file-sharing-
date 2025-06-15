@@ -2,7 +2,7 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Wifi, WifiOff, Users, Clock, RefreshCw, CheckCircle, AlertCircle, Zap } from "lucide-react"
+import { Wifi, WifiOff, Users, Clock, RefreshCw, CheckCircle, AlertCircle, Database } from "lucide-react"
 import type { NetworkStatus } from "@/types"
 import { cn } from "@/lib/utils"
 
@@ -44,9 +44,9 @@ export function NetworkInfo({ networkStatus, isConnected, onRefresh }: NetworkIn
         Last sync: {networkStatus.lastSync.toLocaleTimeString()}
       </Badge>
 
-      <Badge variant="outline" className="flex items-center gap-2 px-3 py-1 text-blue-600">
-        <Zap className="w-4 h-4" />
-        Auto-cleanup: TTL + Smart API
+      <Badge variant="outline" className="flex items-center gap-2 px-3 py-1 text-green-600">
+        <Database className="w-4 h-4" />
+        MongoDB TTL Auto-cleanup
       </Badge>
 
       <Button variant="ghost" size="sm" onClick={onRefresh}>
